@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add/Edit Medication</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+    <h1 class="mb-4 text-center">{{ med|default:"Add" }} Medication</h1>
+
+    <div class="card shadow-sm p-4 bg-white">
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="pill_name" class="form-label">Pill Name</label>
+                <input type="text" class="form-control" name="pill_name" id="pill_name" value="{{ med.pill_name|default:'' }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="dosage" class="form-label">Dosage (Quantity)</label>
+                <input type="text" class="form-control" name="dosage" id="dosage" value="{{ med.dosage|default:'' }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="time" class="form-label">Time</label>
+                <input type="time" class="form-control" name="time" id="time" value="{{ med.time|default:'' }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="frequency" class="form-label">Frequency (per day)</label>
+                <input type="number" class="form-control" name="frequency" id="frequency" value="{{ med.frequency|default:'' }}" min="1" required>
+            </div>
+            <div class="text-center">
+                <button type="submit" class="btn btn-success">Save</button>
+                <a href="{% url 'med_list' %}" class="btn btn-secondary ms-2">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
