@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 
 class Medication(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)   # link with user
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)   # link with user
     pill_name = models.CharField(max_length=100)
     dosage = models.CharField(max_length=50)   # quantity
     time = models.TimeField()
