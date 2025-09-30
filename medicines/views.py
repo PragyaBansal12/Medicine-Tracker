@@ -50,23 +50,38 @@ def medication_list(request):
     meds = Medication.objects.filter(user=request.user)  # only logged-in user's meds
     return render(request, 'medicines/medication_list.html', {'meds': meds})
 
-# CREATE
+# CREATE / ADD MEDICATION
 @login_required
 def medication_create(request):
-    if request.method == 'POST':
-        pill_name = request.POST['pill_name']
-        dosage = request.POST['dosage']
-        time = request.POST['time']
-        frequency = request.POST['frequency']
+    if request.method == "POST":
+        pill_name = request.POST.get("pill_name")
+        dosage = request.POST.get("dosage")
+        frequency = request.POST.get("frequency_type")
+        time_per_day = int(request.POST.get("times_per_day", 1))
+        
+        # Get all times as a list
+        times = request.POST.getlist("times")
+
+        if not pill_name or not dosage or not times:
+            messages.error(request, "Please fill all required fields.")
+            return redirect('med_add')
+
+        # Save medication
         Medication.objects.create(
-            user=request.user,  # attach to logged-in user
+            user=request.user,
             pill_name=pill_name,
-            dosage=dosage,
-            time=time,
-            frequency=frequency
+            dosage=int(dosage),
+            frequency=frequency,
+            time_per_day=time_per_day,
+            times=times  # JSONField or ArrayField
         )
+
+        messages.success(request, f"{pill_name} added successfully!")
         return redirect('med_list')
-    return render(request, 'medicines/medication_form.html')
+
+    # GET request
+    return render(request, "medicines/medication_form.html", {"med": None})
+
 
 # UPDATE
 @login_required

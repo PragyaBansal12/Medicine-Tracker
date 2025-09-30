@@ -14,23 +14,40 @@
     <div class="card shadow-sm p-4 bg-white">
         <form method="post">
             {% csrf_token %}
+
             <div class="mb-3">
-                <label for="pill_name" class="form-label">Pill Name</label>
-                <input type="text" class="form-control" name="pill_name" id="pill_name" value="{{ med.pill_name|default:'' }}" required>
+                <label class="form-label">Pill Name</label>
+                <input type="text" class="form-control" name="pill_name" value="{{ med.pill_name|default:'' }}" required>
             </div>
+
             <div class="mb-3">
-                <label for="dosage" class="form-label">Dosage (Quantity)</label>
-                <input type="text" class="form-control" name="dosage" id="dosage" value="{{ med.dosage|default:'' }}" required>
+                <label class="form-label">Dosage (pills per dose)</label>
+                <input type="number" class="form-control" name="dosage" value="{{ med.dosage|default:'' }}" min="1" required>
             </div>
+
+            <!-- Frequency -->
             <div class="mb-3">
-                <label for="time" class="form-label">Time</label>
-                <input type="time" class="form-control" name="time" id="time" value="{{ med.time|default:'' }}" required>
+                <label class="form-label">Frequency</label>
+                <select class="form-select" name="frequency_type" id="frequency_type">
+                    <option value="DAILY" selected>Daily</option>
+                    <option value="WEEKLY" disabled>Weekly (coming soon)</option>
+                    <option value="CUSTOM" disabled>Custom (coming soon)</option>
+                </select>
             </div>
+
+            <!-- Times per day -->
             <div class="mb-3">
-                <label for="frequency" class="form-label">Frequency (per day)</label>
-                <input type="number" class="form-control" name="frequency" id="frequency" value="{{ med.frequency|default:'' }}" min="1" required>
+                <label class="form-label">Times per day</label>
+                <input type="number" class="form-control" id="times_per_day" name="times_per_day" value="1" min="1" max="5" required>
             </div>
-            <div class="text-center">
+
+            <!-- Dynamic time inputs -->
+            <div class="mb-3">
+                <label class="form-label">Set Times</label>
+                <div id="time-fields"></div>
+            </div>
+
+            <div class="text-center mt-4">
                 <button type="submit" class="btn btn-success">Save</button>
                 <a href="{% url 'med_list' %}" class="btn btn-secondary ms-2">Back</a>
             </div>
@@ -38,7 +55,30 @@
     </div>
 </div>
 
+<script>
+    function renderTimeFields(count) {
+        const container = document.getElementById("time-fields");
+        container.innerHTML = "";
+        for (let i = 1; i <= count; i++) {
+            const input = document.createElement("input");
+            input.type = "time";
+            input.name = "times";  // same name for all inputs
+            input.className = "form-control mb-2";
+            input.required = true;
+            container.appendChild(input);
+        }
+    }
+
+    // Initial render
+    renderTimeFields(parseInt(document.getElementById("times_per_day").value));
+
+    // Update time fields when times_per_day changes
+    document.getElementById("times_per_day").addEventListener("change", function() {
+        let count = Math.min(5, Math.max(1, parseInt(this.value)));
+        renderTimeFields(count);
+    });
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-
