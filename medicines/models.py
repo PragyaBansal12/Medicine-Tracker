@@ -16,7 +16,7 @@ class Medication(models.Model):
         validators=[MaxValueValidator(10000)]
     )   # quantity
     frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default="DAILY")  
-    time_per_day = models.PositiveIntegerField(default=1, validators=[MaxValueValidator(24)])
+    times_per_day = models.PositiveIntegerField(default=1, validators=[MaxValueValidator(24)])
     times = models.JSONField(default=list)  # Store times as a list of strings
     created_at = models.DateTimeField(auto_now_add=True)
 

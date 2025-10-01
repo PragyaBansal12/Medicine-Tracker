@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add/Edit Medication</title>
+    <title>{% if med %}Edit{% else %}Add{% endif %} Medication</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 
 <div class="container mt-5">
-    <h1 class="mb-4 text-center">{{ med|default:"Add" }} Medication</h1>
+    <!-- Updated title logic for Edit vs Add -->
+    <h1 class="mb-4 text-center">{% if med %}Edit{% else %}Add{% endif %} Medication</h1>
 
     <div class="card shadow-sm p-4 bg-white">
         <form method="post">
@@ -29,7 +30,8 @@
             <div class="mb-3">
                 <label class="form-label">Frequency</label>
                 <select class="form-select" name="frequency_type" id="frequency_type">
-                    <option value="DAILY" selected>Daily</option>
+                    <!-- Corrected frequency selection logic -->
+                    <option value="DAILY" {% if not med or med.frequency_type == "DAILY" %}selected{% endif %}>Daily</option>
                     <option value="WEEKLY" disabled>Weekly (coming soon)</option>
                     <option value="CUSTOM" disabled>Custom (coming soon)</option>
                 </select>
@@ -38,10 +40,12 @@
             <!-- Times per day -->
             <div class="mb-3">
                 <label class="form-label">Times per day</label>
-                <input type="number" class="form-control" id="times_per_day" name="times_per_day" value="1" min="1" max="5" required>
+                <!-- Sets the count based on the number of saved times in edit mode -->
+                <input type="number" class="form-control" id="times_per_day" name="times_per_day" 
+                       value="{% if med %}{{ med.times|length }}{% else %}1{% endif %}" min="1" max="5" required>
             </div>
 
-            <!-- Dynamic time inputs -->
+            <!-- Dynamic time inputs container -->
             <div class="mb-3">
                 <label class="form-label">Set Times</label>
                 <div id="time-fields"></div>
@@ -55,30 +59,80 @@
     </div>
 </div>
 
+{# CRITICAL FIX: Pass the existing times list safely as JSON #}
+<script id="initial-times-data" type="application/json">
+    {{ med.times|default:"[]"|safe }}
+</script>
+
 <script>
-    function renderTimeFields(count) {
+    // existing time data
+    const initialTimesElement = document.getElementById('initial-times-data');
+    let initialTimesData = []; 
+    
+    if (initialTimesElement) {
+        const jsonText = initialTimesElement.textContent.trim();
+        
+        try {
+            if (jsonText && jsonText !== '[]' && jsonText.startsWith('[')) {
+                initialTimesData = JSON.parse(jsonText);
+            }
+        } catch (e) {
+            if (jsonText && jsonText.startsWith('[') && jsonText.endsWith(']')) {
+                initialTimesData = jsonText
+                    .substring(1, jsonText.length - 1) 
+                    .split(',')
+                    .map(item => item.trim().replace(/['"]/g, '')) 
+                    .filter(item => item.length > 0);
+            }
+        }
+    }
+
+    // saved data or current data 
+    function renderTimeFields(count, currentValues = []) {
         const container = document.getElementById("time-fields");
         container.innerHTML = "";
-        for (let i = 1; i <= count; i++) {
+        
+        count = Math.min(5, Math.max(1, count));
+        
+        for (let i = 0; i < count; i++) {
             const input = document.createElement("input");
             input.type = "time";
-            input.name = "times";  // same name for all inputs
+            input.name = "times"; // Crucial for Django's getlist()
             input.className = "form-control mb-2";
             input.required = true;
+            
+            // Use temporary cached user input (if count was just changed)
+            if (currentValues.length > i) {
+                input.value = currentValues[i];
+            } 
+            // Use permanent saved DB data (only on page load)
+            else if (i < initialTimesData.length) {
+                input.value = initialTimesData[i];
+            } else {
+                input.value = ""; 
+            }
+            
             container.appendChild(input);
         }
     }
 
-    // Initial render
-    renderTimeFields(parseInt(document.getElementById("times_per_day").value));
+    // Initial Render (on page load)
+    const timesPerDayInput = document.getElementById("times_per_day");
+    let initialCount = parseInt(timesPerDayInput.value) || 1;
+    
+    renderTimeFields(initialCount);
 
-    // Update time fields when times_per_day changes
-    document.getElementById("times_per_day").addEventListener("change", function() {
-        let count = Math.min(5, Math.max(1, parseInt(this.value)));
-        renderTimeFields(count);
+    // Re-render on manual change
+    timesPerDayInput.addEventListener("change", function() {
+        let newCount = parseInt(this.value) || 1;
+        
+        // Get all CURRENTLY entered time values BEFORE redrawing/clearing
+        const currentInputs = document.querySelectorAll('#time-fields input[name="times"]');
+        let currentTimes = Array.from(currentInputs).map(input => input.value);
+        initialTimesData = []; 
+        renderTimeFields(newCount, currentTimes);
     });
 </script>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

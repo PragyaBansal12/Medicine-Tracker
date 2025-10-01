@@ -36,14 +36,6 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-
-# Dashboard (CRUD)
-@login_required
-def medication_list(request):
-    meds = Medication.objects.filter(user=request.user)
-    return render(request, 'medicines/medication_list.html', {'meds': meds})
-
-
 # READ (List)
 @login_required
 def medication_list(request):
@@ -57,7 +49,7 @@ def medication_create(request):
         pill_name = request.POST.get("pill_name")
         dosage = request.POST.get("dosage")
         frequency = request.POST.get("frequency_type")
-        time_per_day = int(request.POST.get("times_per_day", 1))
+        times_per_day = int(request.POST.get("times_per_day", 1))
         
         # Get all times as a list
         times = request.POST.getlist("times")
@@ -72,8 +64,8 @@ def medication_create(request):
             pill_name=pill_name,
             dosage=int(dosage),
             frequency=frequency,
-            time_per_day=time_per_day,
-            times=times  # JSONField or ArrayField
+            times_per_day=times_per_day,
+            times=times  
         )
 
         messages.success(request, f"{pill_name} added successfully!")
@@ -85,15 +77,33 @@ def medication_create(request):
 
 # UPDATE
 @login_required
-def medication_update(request, pk):
-    med = get_object_or_404(Medication, pk=pk, user=request.user)  # ensure user owns it
+def medication_update(request, pk):  
+    med = get_object_or_404(Medication, pk=pk, user=request.user)
+    
     if request.method == 'POST':
-        med.pill_name = request.POST['pill_name']
-        med.dosage = request.POST['dosage']
-        med.time = request.POST['time']
-        med.frequency = request.POST['frequency']
-        med.save()
-        return redirect('med_list')
+        submitted_times = request.POST.getlist('times') 
+        
+        # Update standard fields
+        med.pill_name = request.POST.get('pill_name')
+        med.dosage = request.POST.get('dosage')
+        med.frequency = request.POST.get('frequency_type') 
+        med.times = submitted_times
+        med.times_per_day = len(submitted_times) 
+        
+        # Basic validation check
+        if med.times_per_day == 0:
+            messages.error(request, 'Error: At least one time is required.')
+            return render(request, 'medicines/medication_form.html', {'med': med})
+
+        try:
+            med.save()
+            messages.success(request, f"{med.pill_name} updated successfully!")
+            return redirect('med_list') 
+        except Exception as e:
+            print(f"Database Save Error: {e}")
+            messages.error(request, f'Save failed due to a system error.')
+            return render(request, 'medicines/medication_form.html', {'med': med})
+    
     return render(request, 'medicines/medication_form.html', {'med': med})
 
 # DELETE
