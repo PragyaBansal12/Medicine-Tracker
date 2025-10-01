@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.models import User
 from django.contrib import messages
+import json
 
 # SIGNUP
 def signup_view(request):
@@ -14,7 +15,7 @@ def signup_view(request):
             messages.error(request, "Username already taken. Try login.")
             return redirect('signup')
         user = User.objects.create_user(username=username, password=password)
-        login(request, user, backend='django.contrib.auth.backends.ModelBackend')  # auto login after signup
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         return redirect('med_list')
     return render(request, "medicines/signup.html")
 
@@ -26,7 +27,7 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect('med_list')  # redirect after login
+            return redirect('med_list')
         else:
             messages.error(request, 'Invalid username or password')
     return render(request, 'medicines/login.html')
@@ -41,6 +42,12 @@ def logout_view(request):
 def medication_list(request):
     meds = Medication.objects.filter(user=request.user)  # only logged-in user's meds
     return render(request, 'medicines/medication_list.html', {'meds': meds})
+# MEDICATION LIST
+@login_required
+def medication_list(request):
+    meds = Medication.objects.filter(user=request.user)
+    meds_json = json.dumps([{'pill_name': m.pill_name, 'times': m.times} for m in meds])
+    return render(request, 'medicines/medication_list.html', {'meds': meds, 'meds_json': meds_json})
 
 # CREATE / ADD MEDICATION
 @login_required
@@ -58,7 +65,6 @@ def medication_create(request):
             messages.error(request, "Please fill all required fields.")
             return redirect('med_add')
 
-        # Save medication
         Medication.objects.create(
             user=request.user,
             pill_name=pill_name,
@@ -67,13 +73,13 @@ def medication_create(request):
             times_per_day=times_per_day,
             times=times  
         )
-
         messages.success(request, f"{pill_name} added successfully!")
         return redirect('med_list')
 
-    # GET request
-    return render(request, "medicines/medication_form.html", {"med": None})
-
+    return render(request, "medicines/medication_form.html", {
+        "med": None,
+        "existing_times_json": json.dumps([])
+    })
 
 # UPDATE
 @login_required
@@ -109,6 +115,7 @@ def medication_update(request, pk):
 # DELETE
 @login_required
 def medication_delete(request, pk):
-    med = get_object_or_404(Medication, pk=pk, user=request.user)  # ensure user owns it
+    med = get_object_or_404(Medication, pk=pk, user=request.user)
     med.delete()
+    messages.success(request, "Medication deleted successfully!")
     return redirect('med_list')
