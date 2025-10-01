@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,41 +8,36 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-
 <div class="container mt-5">
-    <h1 class="mb-4 text-center">{{ med|default:"Add" }} Medication</h1>
-
-    <div class="card shadow-sm p-4 bg-white">
+    <h1 class="text-center mb-4">{{ med|default:"Add" }} Medication</h1>
+    <div class="card p-4 shadow-sm bg-white">
         <form method="post">
             {% csrf_token %}
-
             <div class="mb-3">
                 <label class="form-label">Pill Name</label>
                 <input type="text" class="form-control" name="pill_name" value="{{ med.pill_name|default:'' }}" required>
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Dosage (pills per dose)</label>
+                <label class="form-label">Dosage</label>
                 <input type="number" class="form-control" name="dosage" value="{{ med.dosage|default:'' }}" min="1" required>
             </div>
 
-            <!-- Frequency -->
             <div class="mb-3">
                 <label class="form-label">Frequency</label>
-                <select class="form-select" name="frequency_type" id="frequency_type">
-                    <option value="DAILY" selected>Daily</option>
-                    <option value="WEEKLY" disabled>Weekly (coming soon)</option>
-                    <option value="CUSTOM" disabled>Custom (coming soon)</option>
+                <select class="form-select" name="frequency_type">
+                    <option value="DAILY" {% if med.frequency == 'DAILY' %}selected{% endif %}>Daily</option>
+                    <option value="WEEKLY" disabled>Weekly</option>
+                    <option value="CUSTOM" disabled>Custom</option>
                 </select>
             </div>
 
-            <!-- Times per day -->
             <div class="mb-3">
                 <label class="form-label">Times per day</label>
-                <input type="number" class="form-control" id="times_per_day" name="times_per_day" value="1" min="1" max="5" required>
+                <input type="number" class="form-control" id="times_per_day" name="times_per_day"
+                        value="{{ med.time_per_day|default:1 }}" min="1" max="5" required>
             </div>
 
-            <!-- Dynamic time inputs -->
             <div class="mb-3">
                 <label class="form-label">Set Times</label>
                 <div id="time-fields"></div>
@@ -56,23 +52,24 @@
 </div>
 
 <script>
+    let existingTimes = JSON.parse('{{ existing_times_json|escapejs }}');
+
     function renderTimeFields(count) {
         const container = document.getElementById("time-fields");
         container.innerHTML = "";
-        for (let i = 1; i <= count; i++) {
+        for (let i = 0; i < count; i++) {
             const input = document.createElement("input");
             input.type = "time";
-            input.name = "times";  // same name for all inputs
+            input.name = "times";
             input.className = "form-control mb-2";
             input.required = true;
+            if (existingTimes[i]) input.value = existingTimes[i];
             container.appendChild(input);
         }
     }
 
-    // Initial render
     renderTimeFields(parseInt(document.getElementById("times_per_day").value));
 
-    // Update time fields when times_per_day changes
     document.getElementById("times_per_day").addEventListener("change", function() {
         let count = Math.min(5, Math.max(1, parseInt(this.value)));
         renderTimeFields(count);
