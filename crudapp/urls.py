@@ -23,5 +23,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),        # optional for admin
     path('', include('medicines.urls')),   # connects your medicines app
     path('accounts/', include('allauth.urls')),  # allauth urls
+<<<<<<< HEAD
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+=======
+    
+]
+>>>>>>> 83360a075e93833c40416f96463f397960494de8
 
