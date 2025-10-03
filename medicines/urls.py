@@ -1,5 +1,7 @@
 from django.urls import path
 from . import views
+from .views import save_subscription
+
 
 urlpatterns = [
     # Auth
@@ -12,4 +14,11 @@ urlpatterns = [
     path('add/', views.medication_create, name='med_add'),
     path('edit/<int:pk>/', views.medication_update, name='med_edit'),
     path('delete/<int:pk>/', views.medication_delete, name='med_delete'),
+
+    # notifs
+    path('get-vapid-public-key/', views.get_vapid_public_key, name='get_vapid_public_key'),
+    path('save-subscription/', views.save_subscription, name='save_subscription'),
+    
+
+
 ]

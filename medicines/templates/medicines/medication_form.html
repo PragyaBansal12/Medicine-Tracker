@@ -57,6 +57,7 @@
 </div>
 
 {# CRITICAL FIX: Pass the existing times list safely as JSON #}
+<script src="{% static 'medicines/js/notifications.js' %}"  defer></script>
 <script id="initial-times-data" type="application/json">
     {{ med.times|default:"[]"|safe }}
 </script>
