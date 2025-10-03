@@ -12,4 +12,10 @@ urlpatterns = [
     path('add/', views.medication_create, name='med_add'),
     path('edit/<int:pk>/', views.medication_update, name='med_edit'),
     path('delete/<int:pk>/', views.medication_delete, name='med_delete'),
+
+    # Dashboard
+    path('dashboard/', views.dashboard_view, name="dashboard"),
+    path('dashboard/data/', views.dashboard_data, name="dashboard_data"),
+    path('dashboard/log_dose/', views.log_dose, name='log_dose'),
+
 ]

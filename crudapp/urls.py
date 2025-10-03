@@ -21,5 +21,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),        # optional for admin
     path('', include('medicines.urls')),   # connects your medicines app
     path('accounts/', include('allauth.urls')),  # allauth urls
+    
 ]
 
