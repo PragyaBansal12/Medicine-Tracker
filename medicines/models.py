@@ -66,3 +66,16 @@ class DoseLog(models.Model):
     def __str__(self):
         return f"{self.medication.pill_name} - {self.status} @ {self.scheduled_time.strftime('%Y-%m-%d %H:%M')}"    
 
+class GoogleCredentials(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    token_uri = models.TextField(default="https://oauth2.googleapis.com/token")
+    client_id = models.TextField()
+    client_secret = models.TextField()
+    scopes = models.TextField(default="https://www.googleapis.com/auth/calendar")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Google credentials for {self.user.username}"

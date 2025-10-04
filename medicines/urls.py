@@ -1,7 +1,5 @@
 from django.urls import path
 from . import views
-from .views import save_subscription
-
 
 urlpatterns = [
     # Auth
@@ -15,17 +13,16 @@ urlpatterns = [
     path('edit/<int:pk>/', views.medication_update, name='med_edit'),
     path('delete/<int:pk>/', views.medication_delete, name='med_delete'),
 
-<<<<<<< HEAD
-    # notifs
-    path('get-vapid-public-key/', views.get_vapid_public_key, name='get_vapid_public_key'),
-    path('save-subscription/', views.save_subscription, name='save_subscription'),
-    
-
-=======
     # Dashboard
     path('dashboard/', views.dashboard_view, name="dashboard"),
     path('dashboard/data/', views.dashboard_data, name="dashboard_data"),
     path('dashboard/log_dose/', views.log_dose, name='log_dose'),
->>>>>>> 83360a075e93833c40416f96463f397960494de8
 
+    # Push subscription
+    path('save-subscription/', views.save_subscription, name='save_subscription'),
+
+    # Google Calendar OAuth
+    path('google/calendar/connect/', views.google_calendar_auth, name='google_calendar_auth'),
+    path('google/calendar/callback/', views.google_calendar_callback, name='google_calendar_callback'),
+    path('calendar/add-event/<int:med_id>/', views.add_event, name='add_event'),
 ]

@@ -6,8 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medication Schedule</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Custom style for message box to avoid using alert() */
+        .message-box {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            z-index: 1050;
+        }
+    </style>
 </head>
 <body class="bg-light">
+
+<div id="calendar-message-container" class="message-box">
+    <!-- Messages will be injected here -->
+</div>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
@@ -18,8 +31,8 @@
                 <li class="nav-item">
                     <span class="navbar-text me-3">Welcome, {{ user.username }}!</span>
                 </li>
-                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>  <!-- <-- added here -->
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'logout' %}">Logout</a>
@@ -37,82 +50,111 @@
 <div class="container mt-5">
     <h1 class="text-center mb-4">💊 Medication Schedule</h1>
 
-    <div class="text-end mb-3">
+    <div class="d-flex justify-content-between mb-3">
         <a href="{% url 'med_add' %}" class="btn btn-success">+ Add New Medication</a>
+
+        {% if user.is_authenticated %}
+        <!-- This is the button you must click to start the Google Calendar connection -->
+        <a href="{% url 'google_calendar_auth' %}" class="btn btn-outline-primary">Connect Google Calendar</a>
+        {% endif %}
     </div>
 
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Pill Name</th>
-                        <th>Dosage</th>
-                        <th>Times</th>
-                        <th>Frequency</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for m in meds %}
-                    <tr>
-                        <td>{{ m.pill_name }}</td>
-                        <td>{{ m.dosage }}</td>
-                        <td>{{ m.times|join:", " }}</td>
-                        <td>{{ m.frequency }}</td>
-                        <td>
-                            <a href="{% url 'med_edit' m.id %}" class="btn btn-sm btn-warning">Edit</a>
-                            <a href="{% url 'med_delete' m.id %}" class="btn btn-sm btn-danger">Delete</a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center">No medications added yet.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Pill Name</th>
+                    <th>Dosage</th>
+                    <th>Times</th>
+                    <th>Frequency</th>
+                    <th>Actions</th>
+                    <th>Google Calendar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in meds %}
+                <tr>
+                    <td>{{ m.pill_name }}</td>
+                    <td>{{ m.dosage }}</td>
+                    <td>{{ m.times|join:", " }}</td>
+                    <td>{{ m.frequency }}</td>
+                    <td>
+                        <a href="{% url 'med_edit' m.id %}" class="btn btn-sm btn-warning">Edit</a>
+                        <a href="{% url 'med_delete' m.id %}" class="btn btn-sm btn-danger">Delete</a>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-info add-to-calendar-btn" data-med-id="{{ m.id }}">
+                            Add to Calendar
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center">No medications added yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
+</div>
 
-    <script src="{% static 'medicines/js/notifications.js' %}"  defer></script>
+<script src="{% static 'medicines/js/notifications.js' %}" defer></script>
+
 <script>
-    // Pass medications to JS safely
-
-
-    const MEDICATIONS = JSON.parse('{{ meds_data_json|safe }}');
+// Function to show a custom message (replaces alert())
+function showMessage(text, type = 'success') {
+    const container = document.getElementById('calendar-message-container');
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-dismissible fade show alert-${type}`;
+    alertDiv.setAttribute('role', 'alert');
+    alertDiv.innerHTML = `
+        ${text}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    container.appendChild(alertDiv);
     
-    console.log("Medications loaded:", MEDICATIONS);
+    // Automatically dismiss the message after 5 seconds
+    setTimeout(() => {
+        // Check if the alert still exists before trying to close it
+        if (alertDiv.isConnected) {
+            const bsAlert = new bootstrap.Alert(alertDiv);
+            bsAlert.close();
+        }
+    }, 5000);
+}
 
+const MEDICATIONS = JSON.parse('{{ meds_data_json|safe }}');
+console.log("Medications loaded:", MEDICATIONS);
 
-    // Check for Service Worker and send medication data
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        navigator.serviceWorker.ready.then(reg => {
-            if (reg.active) {
-                // Post the medication data to the service worker
-                reg.active.postMessage({
-                    type: 'schedule-notifications',
-                    medications: MEDICATIONS
-                });
-            }
-        });
-    }
+// Google Calendar Add Event
+document.querySelectorAll('.add-to-calendar-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const medId = btn.dataset.medId;
+        btn.disabled = true;
+        btn.textContent = 'Adding...';
 
-
-
-    
-    // Check for Service Worker and send medication data
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        navigator.serviceWorker.ready.then(reg => {
-            if (reg.active) {
-                // Post the medication data to the service worker
-                reg.active.postMessage({
-                    type: 'schedule-notifications',
-                    medications: MEDICATIONS
-                });
-            }
-        });
-    }
+        fetch(`/calendar/add-event/${medId}/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    showMessage(`Successfully added ${data.events.length} events to Google Calendar!`, 'success');
+                } else {
+                    // This error is likely raised if the user hasn't connected or the token is bad
+                    showMessage('Error adding events. Please ensure you have clicked the "Connect Google Calendar" button first.', 'danger');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showMessage('A network error occurred while trying to add events.', 'danger');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = 'Add to Calendar';
+            });
+    });
+});
 </script>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
