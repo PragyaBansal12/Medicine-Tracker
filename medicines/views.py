@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import Medication, PushSubscription
+from .models import Medication, PushSubscription, DoseLog
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.models import User
@@ -10,11 +10,9 @@ from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 import json
 from datetime import date, datetime, timedelta
-from .models import Medication, DoseLog
+from django.utils import timezone
 
-# ===========================
-# AUTH VIEWS
-# ===========================
+# SIGNUP
 def signup_view(request):
     if request.method == "POST":
         username = request.POST['username']
@@ -106,7 +104,9 @@ def medication_update(request, pk):
         med.dosage = request.POST.get('dosage')
         med.frequency = request.POST.get('frequency_type')
         med.times = submitted_times
-        med.times_per_day = len(submitted_times)
+        med.times_per_day = len(submitted_times) 
+        
+        # Basic validation check
         if med.times_per_day == 0:
             messages.error(request, 'At least one time is required.')
             return render(request, 'medicines/medication_form.html', {'med': med})
@@ -129,7 +129,6 @@ def medication_delete(request, pk):
     med.delete()
     messages.success(request, "Medication deleted successfully!")
     return redirect('med_list')
-
 
 @csrf_exempt
 def save_subscription(request):
@@ -164,36 +163,56 @@ def get_vapid_public_key(request):
 def dashboard_view(request):
     meds = Medication.objects.filter(user=request.user)
     today = date.today()
-    now = datetime.now()
+    now = timezone.now()
 
     dose_data = []
     for med in meds:
         for t_str in med.times:
             t_obj = datetime.strptime(t_str, "%H:%M").time()
-            scheduled_dt = datetime.combine(today, t_obj)
-            try:
-                log = DoseLog.objects.get(user=request.user, medication=med, scheduled_time=scheduled_dt)
-                status = log.status
-            except DoseLog.DoesNotExist:
-                status = None
+            scheduled_dt = timezone.make_aware(datetime.combine(today, t_obj))
+            
+            # ALWAYS create DoseLog entry to ensure we have an ID
+            dose_log, created = DoseLog.objects.get_or_create(
+                user=request.user,
+                medication=med,
+                scheduled_time=scheduled_dt,
+                defaults={'status': 'pending'}
+            )
+            
+            # Auto-mark as missed if time has passed and still pending
+            if dose_log.status == 'pending' and scheduled_dt < now:
+                dose_log.status = 'missed'
+                dose_log.save()
+            
             dose_data.append({
                 'med_id': med.id,
                 'pill_name': med.pill_name,
                 'time': t_str,
-                'status': status
+                'status': dose_log.status,
+                'dose_log_id': dose_log.id  # This will always have a value now
             })
 
     # Calculate adherence
     total_doses = len(dose_data)
     taken_doses = sum(1 for d in dose_data if d['status'] == 'taken')
+    missed_doses = sum(1 for d in dose_data if d['status'] == 'missed')
     adherence = round((taken_doses / total_doses) * 100, 1) if total_doses else 0
 
-    # Calculate streak (consecutive days with all doses taken)
+    # Calculate streak
     streak = 0
     for i in range(30):
         day = today - timedelta(days=i)
-        day_logs = DoseLog.objects.filter(user=request.user, scheduled_time__date=day)
-        if day_logs and all(log.status == 'taken' for log in day_logs):
+        day_start = timezone.make_aware(datetime.combine(day, datetime.min.time()))
+        day_end = timezone.make_aware(datetime.combine(day, datetime.max.time()))
+        day_logs = DoseLog.objects.filter(
+            user=request.user, 
+            scheduled_time__range=(day_start, day_end)
+        )
+        
+        expected_doses_count = sum(len(med.times) for med in meds)
+        taken_doses_count = day_logs.filter(status='taken').count()
+        
+        if expected_doses_count > 0 and taken_doses_count == expected_doses_count:
             streak += 1
         else:
             break
@@ -202,20 +221,89 @@ def dashboard_view(request):
     next_dose_time = "--:--"
     for d in sorted(dose_data, key=lambda x: x['time']):
         dose_time_obj = datetime.strptime(d['time'], "%H:%M").time()
-        scheduled_dt = datetime.combine(today, dose_time_obj)
-        if scheduled_dt > now:
+        scheduled_dt = timezone.make_aware(datetime.combine(today, dose_time_obj))
+        if scheduled_dt > now and d['status'] == 'pending':
             next_dose_time = d['time']
             break
 
-    return render(request, "medicines/dashboard.html", {
+    # Weekly adherence data
+    weekly_adherence = []
+    week_days = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        week_days.append(day.strftime('%a'))
+        
+        day_start = timezone.make_aware(datetime.combine(day, datetime.min.time()))
+        day_end = timezone.make_aware(datetime.combine(day, datetime.max.time()))
+        
+        day_logs = DoseLog.objects.filter(
+            user=request.user, 
+            scheduled_time__range=(day_start, day_end)
+        )
+        
+        expected_doses = sum(len(med.times) for med in meds)
+        taken_doses = day_logs.filter(status='taken').count()
+        
+        day_adherence = round((taken_doses / expected_doses) * 100, 1) if expected_doses > 0 else 0
+        weekly_adherence.append(day_adherence)
+
+    context = {
         'meds': meds,
+        'dose_data': dose_data,
         'dose_data_json': json.dumps(dose_data),
         'adherence': adherence,
         'streak': streak,
         'next_dose': next_dose_time,
         'total_doses': total_doses,
-    })
+        'taken_doses': taken_doses,
+        'missed_doses': missed_doses,
+        'weekly_adherence_json': json.dumps(weekly_adherence),
+        'week_days_json': json.dumps(week_days),
+    }
+    return render(request, "medicines/dashboard.html", context)
 
+# ===========================
+# TOGGLE DOSE STATUS
+# ===========================
+@login_required
+@csrf_exempt
+def toggle_dose_status(request):
+    """Simple toggle between taken/missed"""
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            dose_log_id = data.get('dose_log_id')
+            new_status = data.get('status')  # 'taken' or 'missed'
+            
+            # Safety check - ensure dose_log_id is valid
+            if not dose_log_id:
+                return JsonResponse({'status': 'error', 'message': 'Missing dose log ID'})
+            
+            try:
+                dose_log_id = int(dose_log_id)  # Convert to integer
+            except (ValueError, TypeError):
+                return JsonResponse({'status': 'error', 'message': 'Invalid dose log ID'})
+            
+            dose_log = DoseLog.objects.get(id=dose_log_id, user=request.user)
+            
+            # Update status
+            dose_log.status = new_status
+            if new_status == 'taken':
+                dose_log.timestamp = timezone.now()
+            
+            dose_log.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'new_status': dose_log.status
+            })
+            
+        except DoseLog.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Dose not found'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+    
+    return JsonResponse({'status': 'error', 'message': 'Invalid method'})
 
 # ===========================
 # DASHBOARD DATA (AJAX)
@@ -229,12 +317,12 @@ def dashboard_data(request):
     for med in meds:
         for t_str in med.times:
             t_obj = datetime.strptime(t_str, "%H:%M").time()
-            scheduled_dt = datetime.combine(today, t_obj)
+            scheduled_dt = timezone.make_aware(datetime.combine(today, t_obj))
             try:
                 log = DoseLog.objects.get(user=request.user, medication=med, scheduled_time=scheduled_dt)
                 status = log.status
             except DoseLog.DoesNotExist:
-                status = None
+                status = 'pending'
             dose_data.append({
                 'med_id': med.id,
                 'pill_name': med.pill_name,
@@ -244,33 +332,107 @@ def dashboard_data(request):
 
     taken_count = sum(1 for d in dose_data if d['status'] == 'taken')
     missed_count = sum(1 for d in dose_data if d['status'] == 'missed')
+    pending_count = sum(1 for d in dose_data if d['status'] == 'pending')
 
     return JsonResponse({
         'dose_data': dose_data,
         'taken_count': taken_count,
         'missed_count': missed_count,
+        'pending_count': pending_count,
         'total_doses': len(dose_data)
     })
 
 
 # ===========================
-# DOSE LOG AJAX
+# DOSE LOG AJAX (For dashboard buttons)
 # ===========================
 @login_required
 @csrf_exempt
 def log_dose(request):
     if request.method == "POST":
-        data = json.loads(request.body)
-        med = Medication.objects.get(id=data['med_id'], user=request.user)
-        dose_time = datetime.strptime(data['time'], "%H:%M").time()
-        scheduled_dt = datetime.combine(date.today(), dose_time)
-        status = 'taken' if data['taken'] else 'missed'
+        try:
+            data = json.loads(request.body)
+            med = Medication.objects.get(id=data['med_id'], user=request.user)
+            dose_time = datetime.strptime(data['time'], "%H:%M").time()
+            scheduled_dt = timezone.make_aware(datetime.combine(date.today(), dose_time))
+            status = 'taken' if data.get('taken', True) else 'missed'
 
-        DoseLog.objects.update_or_create(
-            user=request.user,
-            medication=med,
-            scheduled_time=scheduled_dt,
-            defaults={'status': status}
-        )
-        return JsonResponse({'status': 'ok'})
-    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+            DoseLog.objects.update_or_create(
+                user=request.user,
+                medication=med,
+                scheduled_time=scheduled_dt,
+                defaults={'status': status}
+            )
+            return JsonResponse({'status': 'success', 'message': 'Dose logged successfully'})
+        except Medication.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Medication not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)
+
+
+# ===========================
+# MARK DOSE TAKEN (For push notification action)
+# ===========================
+@login_required
+@csrf_exempt
+def mark_dose_taken(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            dose_log = DoseLog.objects.get(
+                id=data['dose_log_id'],
+                user=request.user  # Security: ensure user owns this dose log
+            )
+            dose_log.status = 'taken'
+            dose_log.timestamp = timezone.now()  # Update timestamp to when taken
+            dose_log.save()
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': f'{dose_log.medication.pill_name} marked as taken'
+            })
+            
+        except DoseLog.DoesNotExist:
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'Dose log not found'
+            }, status=404)
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error', 
+                'message': str(e)
+            }, status=400)
+    
+    return JsonResponse({
+        'status': 'error', 
+        'message': 'Invalid request method'
+    }, status=405)
+
+
+# ===========================
+# GET TODAY'S DOSE LOGS
+# ===========================
+@login_required
+def get_today_dose_logs(request):
+    today = date.today()
+    today_start = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+    today_end = timezone.make_aware(datetime.combine(today, datetime.max.time()))
+    
+    dose_logs = DoseLog.objects.filter(
+        user=request.user,
+        scheduled_time__range=(today_start, today_end)
+    ).select_related('medication')
+    
+    logs_data = []
+    for log in dose_logs:
+        logs_data.append({
+            'id': log.id,
+            'medication_name': log.medication.pill_name,
+            'scheduled_time': log.scheduled_time.strftime('%H:%M'),
+            'status': log.status,
+            'taken_time': log.timestamp.strftime('%H:%M') if log.status == 'taken' else None
+        })
+    
+    return JsonResponse({'dose_logs': logs_data})

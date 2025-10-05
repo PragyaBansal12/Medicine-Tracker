@@ -1,44 +1,34 @@
-// service-worker.js
-self.addEventListener('install', event => {
-    self.skipWaiting();
-});
-
-self.addEventListener('activate', event => {
-    self.clients.claim();
-});
-
+// service-worker.js - SIMPLIFIED VERSION
 self.addEventListener('push', event => {
-    let notificationData;
-    
-    // parse JSON
+    let data = {};
     try {
-        notificationData = event.data.json();
+        data = event.data.json();
     } catch (e) {
-        notificationData = {
-            title: "Medicine Reminder",
+        data = {
+            title: "💊 Medicine Reminder",
             body: event.data.text()
         };
     }
 
     const options = {
-        body: notificationData.body || notificationData,
-        data: {
-            url: '/' 
-        }
+        body: data.body,
+        // icon: "/static/images/pill.png",
+        // badge: "/static/images/badge.png",
+        data: data.data || {},
+        // No actions - simple notification
+        requireInteraction: false // Don't force user to interact
     };
 
     event.waitUntil(
-        self.registration.showNotification(
-            notificationData.title || "Medicine Reminder", 
-            options
-        )
+        self.registration.showNotification(data.title, options)
     );
 });
 
-self.addEventListener('notificationclick', function(event) {
+self.addEventListener('notificationclick', function (event) {
     event.notification.close();
-    
+
+    // ALWAYS open dashboard, regardless of how user interacts with notification
     event.waitUntil(
-        clients.openWindow(event.notification.data.url || '/')
+        clients.openWindow('/dashboard/')
     );
 });
