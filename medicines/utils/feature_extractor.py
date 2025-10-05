@@ -8,9 +8,9 @@ def extract_features(user, medication):
     taken = logs.filter(status='taken').count()
     past_adherence_rate = taken / total if total > 0 else 1.0
 
-    # 2. Lifestyle routine (taken all doses in last 7 days?)
-    one_week_ago = datetime.now() - timedelta(days=7)
-    recent_logs = logs.filter(scheduled_time__gte=one_week_ago)
+    # 2. Lifestyle routine (taken all doses in last 4 days?)
+    four_days_ago = datetime.now() - timedelta(days=4)
+    recent_logs = logs.filter(scheduled_time__gte= four_days_ago)
     if recent_logs.exists():
         lifestyle_routine = 1 if recent_logs.filter(status='taken').count() == recent_logs.count() else 0
     else:
@@ -37,10 +37,10 @@ def extract_features(user, medication):
 
     # 5. One-hot encoding for time_of_day
     time_features = {
-        'time_of_day_Morning': 1 if time_of_day == 'Morning' else 0,
-        'time_of_day_Afternoon': 1 if time_of_day == 'Afternoon' else 0,
-        'time_of_day_Evening': 1 if time_of_day == 'Evening' else 0,
-        'time_of_day_Night': 1 if time_of_day == 'Night' else 0,
+        'Morning': 1 if time_of_day == 'Morning' else 0,
+        'Afternoon': 1 if time_of_day == 'Afternoon' else 0,
+        'Evening': 1 if time_of_day == 'Evening' else 0,
+        'Night': 1 if time_of_day == 'Night' else 0,
     }
 
     # Final feature set

@@ -19,6 +19,9 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
 
+# import from chatbot package
+from chatbot import get_chatbot_response
+
 
 # SIGNUP
 def signup_view(request):
@@ -548,3 +551,17 @@ def add_event(request, med_id=None):
 		events_added.append(created_event.get('htmlLink'))
 
 	return JsonResponse({'status': 'ok', 'events': events_added})
+
+@csrf_exempt
+def chatbot_view(request):
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            user_input = body.get('message', '')
+
+            bot_response = get_chatbot_response(user_input)
+
+            return JsonResponse({'response': bot_response})
+        except Exception as e:
+            return JsonResponse({'response': f'Error: {str(e)}'})
+    return JsonResponse({'response': 'Invalid request method'}, status=400)
