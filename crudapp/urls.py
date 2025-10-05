@@ -23,4 +23,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),        # optional for admin
     path('', include('medicines.urls')),   # connects your medicines app
     path('accounts/', include('allauth.urls')),  # allauth urls
+
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+handler400 = 'django.views.defaults.bad_request'
+handler403 = 'django.views.defaults.permission_denied'
+handler404 = 'django.views.defaults.page_not_found'
+handler500 = 'django.views.defaults.server_error'
