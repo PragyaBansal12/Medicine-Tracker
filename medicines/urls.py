@@ -29,4 +29,9 @@ urlpatterns = [
     # Notifications
     path('get-vapid-public-key/', views.get_vapid_public_key, name='get_vapid_public_key'),
     path('save-subscription/', views.save_subscription, name='save_subscription'),
+
+     # Google Calendar OAuth
+    path('google/calendar/connect/', views.google_calendar_auth, name='google_calendar_auth'),
+    path('google/calendar/callback/', views.google_calendar_callback, name='google_calendar_callback'),
+    path('calendar/add-event/<int:med_id>/', views.add_event, name='add_event'),
 ]

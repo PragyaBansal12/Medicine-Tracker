@@ -1,0 +1,54 @@
+<!-- Floating Chatbot Component -->
+<div class="chatbot-widget">
+    <!-- Floating Button -->
+    <div class="chatbot-toggle" id="chatbotToggle">
+        <i class="fas fa-robot"></i>
+    </div>
+
+    <!-- Chat Modal -->
+    <div class="chatbot-modal" id="chatbotModal">
+        <div class="chatbot-header">
+            <div class="chatbot-title">
+                <i class="fas fa-robot"></i>
+                <h3>MediAssistant</h3>
+                <span class="status-dot"></span>
+            </div>
+            <button class="chatbot-close" id="chatbotClose">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="chatbot-messages" id="chatbotMessages">
+            <!-- Initial Bot Message -->
+            <div class="message bot-message">
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <p>Hello! I'm your MediAssistant. How can I help you with your medications today?</p>
+                    <span class="message-time">Just now</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chatbot-input">
+            <div class="quick-questions">
+                <button class="quick-question" data-question="What medications do I have today?">
+                    Today's meds?
+                </button>
+                <button class="quick-question" data-question="I missed a medicine">
+                    Missed medicine
+                </button>
+                <button class="quick-question" data-question="Add new medication">
+                    Add medication
+                </button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="chatbotInput" placeholder="Ask about your medications..." maxlength="500">
+                <button id="chatbotSend">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

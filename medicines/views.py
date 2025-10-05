@@ -121,16 +121,16 @@ def medication_update(request, pk):
             messages.error(request, 'At least one time is required.')
             return render(request, 'medicines/medication_form.html', {'med': med})
 
-		try:
-			med.save()
-			messages.success(request, f"{med.pill_name} updated successfully!")
-			return redirect('med_list')
-		except Exception as e:
-			print(f"Database Save Error: {e}")
-			messages.error(request, f'Save failed due to a system error.')
-			return render(request, 'medicines/medication_form.html', {'med': med})
-	
-	return render(request, 'medicines/medication_form.html', {'med': med})
+        try:
+            med.save()
+            messages.success(request, f"{med.pill_name} updated successfully!")
+            return redirect('med_list')
+        except Exception as e:
+            print(f"Database Save Error: {e}")
+            messages.error(request, f'Save failed due to a system error.')
+            return render(request, 'medicines/medication_form.html', {'med': med})
+    
+    return render(request, 'medicines/medication_form.html', {'med': med})
 
 
 @login_required
@@ -442,3 +442,109 @@ def get_today_dose_logs(request):
         })
     
     return JsonResponse({'dose_logs': logs_data})
+
+
+# ===========================
+# GOOGLE CALENDAR INTEGRATION
+# ===========================
+@login_required
+def google_calendar_auth(request):
+	flow = Flow.from_client_config(
+		{
+			"web": {
+				"client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
+				"client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
+				"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+				"token_uri": "https://oauth2.googleapis.com/token",
+			}
+		},
+		scopes=["https://www.googleapis.com/auth/calendar.events"],
+		redirect_uri=request.build_absolute_uri(reverse('google_calendar_callback'))
+	)
+	auth_url, _ = flow.authorization_url(
+		access_type='offline', 
+		include_granted_scopes='true',
+		prompt='consent' # <-- ADDED: Forces consent screen to ensure refresh_token is returned
+	)
+	return redirect(auth_url)
+
+
+@login_required
+def google_calendar_callback(request):
+	flow = Flow.from_client_config(
+		{
+			"web": {
+				"client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
+				"client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
+				"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+				"token_uri": "https://oauth2.googleapis.com/token",
+			}
+		},
+		scopes=["https://www.googleapis.com/auth/calendar.events"],
+		redirect_uri=request.build_absolute_uri(reverse('google_calendar_callback'))
+	)
+	flow.fetch_token(authorization_response=request.build_absolute_uri())
+
+	credentials = flow.credentials
+
+	# Prepare defaults, ensuring we only include refresh_token if provided by Google.
+	# If it is not provided (which is common on subsequent authorizations), 
+	# Django will retain the existing value on update, preventing the IntegrityError.
+	defaults = {
+		"access_token": credentials.token,
+		"client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
+		"client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
+	}
+
+	if credentials.refresh_token:
+		defaults["refresh_token"] = credentials.refresh_token
+
+	creds_obj, _ = GoogleCredentials.objects.update_or_create(
+		user=request.user,
+		defaults=defaults
+	)
+	messages.success(request, "Google Calendar connected successfully!")
+	return redirect('dashboard')
+
+
+@login_required
+def add_event(request, med_id=None):
+	med = get_object_or_404(Medication, id=med_id, user=request.user)
+
+	try:
+		creds_obj = GoogleCredentials.objects.get(user=request.user)
+		creds = Credentials(
+			token=creds_obj.access_token,
+			refresh_token=creds_obj.refresh_token,
+			token_uri="https://oauth2.googleapis.com/token",
+			client_id=creds_obj.client_id,
+			client_secret=creds_obj.client_secret,
+			scopes=["https://www.googleapis.com/auth/calendar.events"]
+		)
+	except GoogleCredentials.DoesNotExist:
+		messages.error(request, "Please connect your Google Calendar first.")
+		return redirect('google_calendar_auth')
+
+	service = build('calendar', 'v3', credentials=creds)
+	today = date.today()
+	events_added = []
+
+	for t_str in med.times:
+		time_obj = datetime.strptime(t_str, "%H:%M").time()
+		start_datetime = datetime.combine(today, time_obj)
+		end_datetime = start_datetime + timedelta(minutes=30)
+
+		event = {
+			'summary': f'Medication: {med.pill_name}',
+			'description': f'Take {med.dosage} mg',
+			'start': {'dateTime': start_datetime.isoformat(), 'timeZone': 'Asia/Kolkata'},
+			'end': {'dateTime': end_datetime.isoformat(), 'timeZone': 'Asia/Kolkata'},
+		}
+
+		created_event = service.events().insert(
+			calendarId='primary',
+			body=event
+		).execute()
+		events_added.append(created_event.get('htmlLink'))
+
+	return JsonResponse({'status': 'ok', 'events': events_added})
