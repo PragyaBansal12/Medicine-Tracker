@@ -62,6 +62,3 @@ print(model.predict_proba(x_test))
 import joblib
 joblib.dump(model, 'adherence_model.pkl')
 print("done")
-
-# search this on chatgpt
-# on youtube i found out that to integrate any model in webd app , we should use fastapi or flask , but we are not doing it . what is differenece inthat procedure and in this procedure. and in what situation they should be preffeerrred

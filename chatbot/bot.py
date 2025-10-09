@@ -76,7 +76,7 @@ if vector_store is None:
 # retreiver
 retriever = vector_store.as_retriever(
     search_type="mmr",
-    search_kwargs={"k": 2 , "lambda_mult":0.7}
+    search_kwargs={"k": 2 , "lambda_mult":0.7} #k=top results , lambdad_mult = relevence-diversity balance
     )
 
 # query="what happens if i miss dose?"
@@ -93,12 +93,10 @@ llm = ChatGroq(
     temperature=0.3,
 )
 
-
-
 #  RAG QA chain
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
-    chain_type="stuff",  # "map_reduce" or "stuff" depending on preference
+    chain_type="stuff",
     retriever=retriever,
     return_source_documents=False
 )
@@ -140,7 +138,7 @@ for tool in sql_tools:
             "'what medicines am I taking'. "
             "NEVER use for general medical knowledge - use Medical Knowledge Base instead."
             "Main tables: medicines_doselog (dose history), medicines_medication (prescriptions). "
-            "Example: 'SELECT * FROM medicines_doselog WHERE user_id = 2 ORDER BY timestamp DESC LIMIT 1'"
+            "Example: 'SELECT * FROM medicines_doselog WHERE user_id = 5 ORDER BY timestamp DESC LIMIT 1'"
         )
         break
 
@@ -277,6 +275,8 @@ agent = initialize_agent(
     llm=llm,
     agent_type="zero-shot-react-description",
     verbose=True,
+    max_iterations=10,
+    early_stopping_method="generate"
 )
 
 def get_chatbot_response(user_query: str) -> str:
@@ -308,43 +308,16 @@ def get_chatbot_response(user_query: str) -> str:
 response1 = get_chatbot_response("When was last dose taken?")
 print(response1)
 
-res2= get_chatbot_response("give adherence tips")
+res2= get_chatbot_response("Suggest me adherence tips.")
 print(res2)
+
+# What is medication schedule for today?
+
 
 res3= get_chatbot_response("hi")
 print(res3)
 
-#### Rescheduling tool
-# from datetime import datetime, timedelta
 
-# def reschedule_dose(info: str) -> str:
-#     """
-#     info: string describing which dose to reschedule
-#     Example: "I missed my 9 AM paracetamol dose today"
-    
-#     Returns a confirmation string
-#     """
-#     # For now, we'll parse simple info using keywords
-#     # In real case, you can parse dose name, time, date, user_id, etc.
 
-#     # Mock logic: always reschedule 2 hours from now
-#     new_time = datetime.now() + timedelta(hours=2)
-#     new_time_str = new_time.strftime("%Y-%m-%d %H:%M")
 
-#     # Here you would normally update your database or calendar
-#     # e.g., UPDATE doses SET dose_time=new_time WHERE ...  
-
-#     return f"Your dose has been rescheduled to {new_time_str}."
-
-# # wrap it as a langchain tool
-# from langchain.agents import Tool
-
-# rescheduler_tool = Tool(
-#     name="Dose Rescheduler",
-#     func=reschedule_dose,
-#     description=(
-#         "Use this tool when the user wants to reschedule a missed medication dose. "
-#         "The input will describe which dose and when it was missed."
-#     )
-# )
 

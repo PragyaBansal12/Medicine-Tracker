@@ -179,7 +179,10 @@ def dashboard_view(request):
 
     dose_data = []
     for med in meds:
-        for t_str in med.times:
+        # Safety check: Ensure med.times is a list before iterating
+        times_list = med.times if isinstance(med.times, list) else [] 
+        
+        for t_str in times_list:
             t_obj = datetime.strptime(t_str, "%H:%M").time()
             scheduled_dt = timezone.make_aware(datetime.combine(today, t_obj))
             
@@ -204,6 +207,11 @@ def dashboard_view(request):
                 'dose_log_id': dose_log.id  # This will always have a value now
             })
 
+    # --- PRIMARY CHANGE FOR SEQUENTIAL ORDER ---
+    # Sort dose_data by time string (e.g., "08:00" comes before "12:00")
+    dose_data.sort(key=lambda x: x['time']) 
+    # -------------------------------------------
+
     # Calculate adherence
     total_doses = len(dose_data)
     taken_doses = sum(1 for d in dose_data if d['status'] == 'taken')
@@ -212,18 +220,27 @@ def dashboard_view(request):
 
     # Calculate streak
     streak = 0
+    # Use a set of all unique medications to calculate expected doses per day
+    all_meds = Medication.objects.filter(user=request.user)
+    
     for i in range(30):
         day = today - timedelta(days=i)
         day_start = timezone.make_aware(datetime.combine(day, datetime.min.time()))
         day_end = timezone.make_aware(datetime.combine(day, datetime.max.time()))
+        
+        # We need to consider all possible scheduled doses for that day
+        expected_doses_count = sum(len(m.times) for m in all_meds if isinstance(m.times, list))
+        
+        # Check the logs for that specific day
         day_logs = DoseLog.objects.filter(
             user=request.user, 
-            scheduled_time__range=(day_start, day_end)
+            # Note: scheduled_time is used to track the *intended* date
+            scheduled_time__range=(day_start, day_end) 
         )
-        
-        expected_doses_count = sum(len(med.times) for med in meds)
+
         taken_doses_count = day_logs.filter(status='taken').count()
         
+        # A perfect day means all expected doses for that day were taken
         if expected_doses_count > 0 and taken_doses_count == expected_doses_count:
             streak += 1
         else:
@@ -231,7 +248,8 @@ def dashboard_view(request):
 
     # Next dose
     next_dose_time = "--:--"
-    for d in sorted(dose_data, key=lambda x: x['time']):
+    # Iterate over the sorted dose_data for the nearest upcoming dose
+    for d in dose_data:
         dose_time_obj = datetime.strptime(d['time'], "%H:%M").time()
         scheduled_dt = timezone.make_aware(datetime.combine(today, dose_time_obj))
         if scheduled_dt > now and d['status'] == 'pending':
@@ -241,7 +259,7 @@ def dashboard_view(request):
     # Weekly adherence data
     weekly_adherence = []
     week_days = []
-    for i in range(6, -1, -1):
+    for i in range(6, -1, -1): # Last 7 days including today
         day = today - timedelta(days=i)
         week_days.append(day.strftime('%a'))
         
@@ -253,10 +271,10 @@ def dashboard_view(request):
             scheduled_time__range=(day_start, day_end)
         )
         
-        expected_doses = sum(len(med.times) for med in meds)
-        taken_doses = day_logs.filter(status='taken').count()
+        expected_doses = sum(len(m.times) for m in all_meds if isinstance(m.times, list))
+        taken_doses_for_day = day_logs.filter(status='taken').count()
         
-        day_adherence = round((taken_doses / expected_doses) * 100, 1) if expected_doses > 0 else 0
+        day_adherence = round((taken_doses_for_day / expected_doses) * 100, 1) if expected_doses > 0 else 0
         weekly_adherence.append(day_adherence)
 
     context = {

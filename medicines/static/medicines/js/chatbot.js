@@ -97,4 +97,4 @@ class Chatbot {
 // Initialize chatbot when DOM is loaded
 document.addEventListener('DOMContentLoaded', function () {
     new Chatbot();
-}); s
+});

@@ -12,7 +12,7 @@ def extract_features(user, medication):
     four_days_ago = datetime.now() - timedelta(days=4)
     recent_logs = logs.filter(scheduled_time__gte= four_days_ago)
     if recent_logs.exists():
-        lifestyle_routine = 1 if recent_logs.filter(status='taken').count() == recent_logs.count() else 0
+        lifestyle_routine = 1 if recent_logs.filter(status='taken').count() >= 0.8*recent_logs.count() else 0
     else:
         lifestyle_routine = 0
 
