@@ -37,7 +37,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: 
+            background-image:
                 radial-gradient(circle at 20% 80%, rgba(255, 215, 0, 0.3) 2px, transparent 2px),
                 radial-gradient(circle at 80% 20%, rgba(255, 215, 0, 0.3) 2px, transparent 2px),
                 radial-gradient(circle at 40% 40%, rgba(177, 156, 217, 0.2) 1px, transparent 1px);
@@ -48,15 +48,20 @@
         }
 
         @keyframes sparkle {
-            0% { transform: translateY(0px) rotate(0deg); }
-            100% { transform: translateY(-100px) rotate(360deg); }
+            0% {
+                transform: translateY(0px) rotate(0deg);
+            }
+
+            100% {
+                transform: translateY(-100px) rotate(360deg);
+            }
         }
 
         .page-container {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(15px);
             border-radius: 25px;
-            box-shadow: 
+            box-shadow:
                 0 10px 30px rgba(0, 0, 0, 0.3),
                 0 0 50px rgba(255, 215, 0, 0.2);
             margin-top: 2rem;
@@ -73,10 +78,10 @@
             left: 0;
             right: 0;
             height: 5px;
-            background: linear-gradient(90deg, 
-                var(--disney-blue), 
-                var(--disney-purple), 
-                var(--disney-red), 
+            background: linear-gradient(90deg,
+                var(--disney-blue),
+                var(--disney-purple),
+                var(--disney-red),
                 var(--disney-gold));
             z-index: 10;
         }
@@ -115,8 +120,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .btn-magical {
@@ -138,9 +148,9 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, 
-                transparent, 
-                rgba(255, 255, 255, 0.3), 
+            background: linear-gradient(90deg,
+                transparent,
+                rgba(255, 255, 255, 0.3),
                 transparent);
             transition: left 0.5s;
         }
@@ -257,8 +267,13 @@
         }
 
         @keyframes bounce {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
         }
     </style>
 </head>
@@ -266,10 +281,8 @@
 <body>
 
     <div id="calendar-message-container" class="message-box">
-        <!-- Messages will be injected here -->
-    </div>
+        </div>
 
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-disney">
         <div class="container">
             <a class="navbar-brand" href="{% url 'dashboard' %}">
@@ -295,16 +308,13 @@
         </div>
     </nav>
 
-    <!-- Main Content -->
     <div class="container">
         <div class="page-container p-4 p-lg-5">
-            <!-- Header -->
             <div class="text-center mb-5">
                 <h1 class="welcome-title display-4 fw-bold mb-3">Medication Schedule</h1>
-                <p class="lead text-muted">Manage your magical medication journey! ✨</p>
+                <p class="lead text-muted">🎩 Take Charge of Your Medicine Routine! ✨</p>
             </div>
 
-            <!-- Action Buttons -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <a href="{% url 'med_add' %}" class="btn btn-success-magical btn-magical">
                     <i class="fas fa-plus-circle me-2"></i>Add New Medication
@@ -317,7 +327,6 @@
                 {% endif %}
             </div>
 
-            <!-- Medications Table -->
             <div class="table-responsive">
                 <table class="table table-magical">
                     <thead>
@@ -356,9 +365,17 @@
                                 </div>
                             </td>
                             <td>
-                                <button class="btn btn-info btn-sm-magical add-to-calendar-btn" data-med-id="{{ m.id }}">
-                                    <i class="fas fa-calendar-check me-1"></i>Add to Calendar
-                                </button>
+                                <div class="calendar-actions">
+                                    {% if m.google_event_ids %} 
+                                    <a href="javascript:void(0);" class="btn btn-danger btn-sm-magical remove-from-calendar-btn" data-med-id="{{ m.id }}">
+                                        <i class="fas fa-calendar-times me-1"></i>Remove from Calendar
+                                    </a>
+                                    {% else %}
+                                    <button class="btn btn-info btn-sm-magical add-to-calendar-btn" data-med-id="{{ m.id }}">
+                                        <i class="fas fa-calendar-check me-1"></i>Add to Calendar
+                                    </button>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% empty %}
@@ -366,8 +383,8 @@
                             <td colspan="6">
                                 <div class="empty-state">
                                     <i class="fas fa-prescription-bottle fa-4x text-muted mb-3"></i>
-                                    <h4 class="text-muted">No magical potions yet!</h4>
-                                    <p class="text-muted">Add your first medication to start your journey</p>
+                                    <h4 class="text-muted">🎩 No elixirs yet — Add your first one!</h4>
+                                    <p class="text-muted">Add your first medication </p>
                                     <a href="{% url 'med_add' %}" class="btn btn-success-magical btn-magical mt-3">
                                         <i class="fas fa-plus-circle me-2"></i>Add First Medication
                                     </a>
@@ -386,59 +403,170 @@
     <script src="{% static 'medicines/js/notifications.js' %}" defer></script>
 
     <script>
-        // Function to show a custom message (replaces alert())
-        function showMessage(text, type = 'success') {
-            const container = document.getElementById('calendar-message-container');
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-dismissible fade show alert-${type} alert-magical`;
-            alertDiv.setAttribute('role', 'alert');
-            alertDiv.innerHTML = `
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
-                ${text}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
-            container.appendChild(alertDiv);
-
-            // Automatically dismiss the message after 5 seconds
-            setTimeout(() => {
-                if (alertDiv.isConnected) {
-                    const bsAlert = new bootstrap.Alert(alertDiv);
-                    bsAlert.close();
+    // ==========================
+    // CSRF token helper for Django
+    // ==========================
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                cookie = cookie.trim();
+                if (cookie.startsWith(name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
                 }
-            }, 5000);
+            }
         }
+        return cookieValue;
+    }
 
-        const MEDICATIONS = JSON.parse('{{ meds_data_json|safe }}');
-        console.log("Medications loaded:", MEDICATIONS);
+    const csrftoken = getCookie('csrftoken');
 
-        // Google Calendar Add Event
-        document.querySelectorAll('.add-to-calendar-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const medId = btn.dataset.medId;
-                const originalText = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding...';
+    // ==========================
+    // Show message function
+    // ==========================
+    function showMessage(text, type = 'success') {
+        const container = document.getElementById('calendar-message-container');
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-dismissible fade show alert-${type} alert-magical`;
+        alertDiv.setAttribute('role', 'alert');
+        alertDiv.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+            ${text}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        container.appendChild(alertDiv);
 
-                fetch(`/calendar/add-event/${medId}/`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.status === 'ok') {
-                            showMessage(`✨ Successfully added ${data.events.length} events to Google Calendar!`, 'success');
-                        } else {
-                            showMessage('⚠️ Please click "Connect Google Calendar" first to set up your calendar.', 'danger');
-                        }
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        showMessage('❌ Network error occurred while adding events.', 'danger');
-                    })
-                    .finally(() => {
-                        btn.disabled = false;
-                        btn.innerHTML = originalText;
+        setTimeout(() => {
+            if (alertDiv.isConnected) {
+                const bsAlert = new bootstrap.Alert(alertDiv);
+                bsAlert.close();
+            }
+        }, 5000);
+    }
+
+    // ===========================================
+    // Attach Remove Listener (Must be defined first)
+    // ===========================================
+    function attachRemoveListener(btn) {
+        // Use a named handler function for removal
+        function removeHandler(event) {
+            event.preventDefault(); 
+            const medId = btn.dataset.medId;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Removing...';
+
+            fetch(`/google-calendar/delete-event/${medId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => {
+                // Check for HTTP errors
+                if (!res.ok) {
+                    return res.json().then(errorData => {
+                        throw new Error(errorData.message || 'Server responded with an error.');
                     });
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.status === 'ok') {
+                    showMessage(data.message || '✨ Event(s) removed from Google Calendar!', 'success');
+                    
+                    // ⭐ FIX 1: Remove old listener before swapping
+                    btn.removeEventListener('click', removeHandler);
+
+                    // Update DOM classes/text
+                    btn.classList.remove('btn-danger', 'remove-from-calendar-btn');
+                    btn.classList.add('btn-info', 'add-to-calendar-btn');
+                    btn.innerHTML = '<i class="fas fa-calendar-check me-1"></i>Add to Calendar';
+                    
+                    // ⭐ FIX 2: Attach the new listener (which will use its own named function)
+                    attachAddListener(btn);
+                } else {
+                    showMessage(`⚠️ ${data.message || 'Failed to remove event from calendar.'}`, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                showMessage(`❌ Error: ${error.message || 'Network error occurred while removing event.'}`, 'danger');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                // Ensure text is restored if an error occurred before successful swap
+                if (btn.classList.contains('remove-from-calendar-btn')) {
+                    btn.innerHTML = originalText;
+                }
             });
-        });
+        }
+        btn.addEventListener('click', removeHandler);
+    }
+
+
+    // ===========================================
+    // Attach Add Listener
+    // ===========================================
+    function attachAddListener(btn) {
+        // Use a named handler function for removal
+        function addHandler(event) {
+            event.preventDefault(); 
+            const medId = btn.dataset.medId;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding...';
+
+            fetch(`/calendar/add-event/${medId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    // Note: data.count comes from the updated Django view
+                    showMessage(`✨ Successfully added ${data.count || data.events.length} events to Google Calendar!`, 'success'); 
+                    
+                    // ⭐ FIX 1: Remove old listener before swapping
+                    btn.removeEventListener('click', addHandler);
+                    
+                    // Update DOM classes/text
+                    btn.classList.remove('btn-info', 'add-to-calendar-btn');
+                    btn.classList.add('btn-danger', 'remove-from-calendar-btn');
+                    btn.innerHTML = '<i class="fas fa-calendar-times me-1"></i>Remove from Calendar';
+                    
+                    // ⭐ FIX 2: Attach the new listener
+                    attachRemoveListener(btn);
+                } else {
+                    showMessage(`⚠️ ${data.message || 'Failed to add event.'}`, 'danger');
+                    btn.innerHTML = originalText;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showMessage('❌ Network error occurred while adding events.', 'danger');
+                btn.innerHTML = originalText;
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+        }
+        btn.addEventListener('click', addHandler);
+    }
+
+    // ==========================
+    // Initialize all buttons
+    // ==========================
+    document.querySelectorAll('.add-to-calendar-btn').forEach(attachAddListener);
+    document.querySelectorAll('.remove-from-calendar-btn').forEach(attachRemoveListener);
     </script>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 </body>

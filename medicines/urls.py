@@ -34,6 +34,7 @@ urlpatterns = [
     path('google/calendar/connect/', views.google_calendar_auth, name='google_calendar_auth'),
     path('google/calendar/callback/', views.google_calendar_callback, name='google_calendar_callback'),
     path('calendar/add-event/<int:med_id>/', views.add_event, name='add_event'),
+    path('google-calendar/delete-event/<int:med_id>/', views.delete_event, name='delete_event'),
     
     # Chatbot
     path('chatbot/', views.chatbot_view, name='chatbot_view'),

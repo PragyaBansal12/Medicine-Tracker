@@ -13,6 +13,8 @@ import json
 from datetime import date, datetime, timedelta
 
 from django.utils import timezone
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
 
 # Google API imports
 from google.oauth2.credentials import Credentials
@@ -23,18 +25,130 @@ from google_auth_oauthlib.flow import Flow
 from chatbot import get_chatbot_response
 
 
+# ===========================
+# INTERNAL HELPER FUNCTIONS (UPDATED)
+# ===========================
+
+def _delete_google_events(user, event_ids):
+    """Internal helper to safely delete a list of Google Calendar events."""
+    if not event_ids:
+        return 0
+        
+    try:
+        creds_obj = GoogleCredentials.objects.get(user=user)
+        creds = Credentials(
+            token=creds_obj.access_token,
+            refresh_token=creds_obj.refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=creds_obj.client_id,
+            client_secret=creds_obj.client_secret,
+            scopes=["https://www.googleapis.com/auth/calendar.events"]
+        )
+    except GoogleCredentials.DoesNotExist:
+        # Cannot delete without credentials
+        return 0
+
+    service = build('calendar', 'v3', credentials=creds)
+    deleted_count = 0
+    
+    for event_id in event_ids:
+        try:
+            # Note: For recurring events, deleting the master event deletes all instances.
+            service.events().delete(
+                calendarId='primary',
+                eventId=event_id
+            ).execute()
+            deleted_count += 1
+        except Exception as e:
+            # Log the error but continue trying to delete other events
+            # Errors can occur if an event was manually deleted by the user.
+            print(f"Error deleting event {event_id} during update/delete: {e}")
+            
+    return deleted_count
+
+
+def _create_google_events(user, med, service=None):
+    """
+    Internal helper to create recurring Google Calendar events for a medication.
+    Returns: list of new Google Event IDs (master recurring event IDs).
+    """
+    new_event_ids = []
+    
+    try:
+        if not service:
+            creds_obj = GoogleCredentials.objects.get(user=user)
+            creds = Credentials(
+                token=creds_obj.access_token,
+                refresh_token=creds_obj.refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=creds_obj.client_id,
+                client_secret=creds_obj.client_secret,
+                scopes=["https://www.googleapis.com/auth/calendar.events"]
+            )
+            service = build('calendar', 'v3', credentials=creds)
+    except GoogleCredentials.DoesNotExist:
+        raise
+    
+    # Logic for recurrence (RCULE) based on frequency
+    # Assuming 'daily' is a valid value for med.frequency
+    if med.frequency == 'daily':
+        # Default recurrence is daily, indefinitely.
+        # You could also add an UNTIL date (e.g., 1 year from now) for performance.
+        recurrence_rule = 'RRULE:FREQ=DAILY'
+    elif med.frequency == 'weekly':
+        # You might need a more complex form for weekly, but for simplicity, we use the rule.
+        # Real-world app may need a field for 'day of week'.
+        recurrence_rule = 'RRULE:FREQ=WEEKLY'
+    else:
+        # If frequency is not recognized, default to daily for 30 days
+        until_date = (date.today() + timedelta(days=30)).strftime('%Y%m%dT000000Z')
+        recurrence_rule = f'RRULE:FREQ=DAILY;UNTIL={until_date}' 
+    
+    today = timezone.localdate()
+
+    for t_str in med.times:
+        time_obj = datetime.strptime(t_str, "%H:%M").time()
+        # Events must start from the earliest time possible today in the user's timezone (Asia/Kolkata)
+        start_datetime_local = datetime.combine(today, time_obj)
+        start_datetime = timezone.make_aware(start_datetime_local)
+        
+        # End time is 30 minutes later
+        end_datetime = start_datetime + timedelta(minutes=30) 
+
+        event = {
+            'summary': f'Medication: {med.pill_name} ({med.dosage} mg)',
+            'description': f'Time to take your {med.pill_name} dose.',
+            'start': {'dateTime': start_datetime.isoformat(), 'timeZone': 'Asia/Kolkata'},
+            'end': {'dateTime': end_datetime.isoformat(), 'timeZone': 'Asia/Kolkata'},
+            # Add the recurrence rule to make it a recurring event
+            'recurrence': [recurrence_rule],
+        }
+
+        created_event = service.events().insert(
+            calendarId='primary',
+            body=event
+        ).execute()
+        new_event_ids.append(created_event.get('id'))
+
+    return new_event_ids
+
+
+# ===========================
+# AUTHENTICATION VIEWS
+# ===========================
+
 # SIGNUP
 def signup_view(request):
-	if request.method == "POST":
-		username = request.POST['username']
-		password = request.POST['password']
-		if User.objects.filter(username=username).exists():
-			messages.error(request, "Username already taken. Try login.")
-			return redirect('signup')
-		user = User.objects.create_user(username=username, password=password)
-		login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-		return redirect('med_list')
-	return render(request, "medicines/signup.html")
+    if request.method == "POST":
+        username = request.POST['username']
+        password = request.POST['password']
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already taken. Try login.")
+            return redirect('signup')
+        user = User.objects.create_user(username=username, password=password)
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+        return redirect('med_list')
+    return render(request, "medicines/signup.html")
 
 
 def login_view(request):
@@ -50,72 +164,83 @@ def login_view(request):
 
 
 def logout_view(request):
-	logout(request)
-	return redirect('login')
+    logout(request)
+    return redirect('login')
 
 
 # ===========================
-# CRUD VIEWS
+# CRUD VIEWS (MODIFIED)
 # ===========================
 @login_required
 def medication_list(request):
-	meds = Medication.objects.filter(user=request.user)
+    meds = Medication.objects.filter(user=request.user)
 
-	meds_data = []
-	for med in meds:
-		times_list = med.times if isinstance(med.times, list) else [] 
-		meds_data.append({
-			"pill_name": med.pill_name,
-			"dosage": med.dosage,
-			"times": times_list,
-			"frequency": med.frequency,
-			"times_per_day": med.times_per_day
-		})
-	
-	meds_data_json = json.dumps(meds_data, cls=DjangoJSONEncoder)
+    meds_data = []
+    for med in meds:
+        times_list = med.times if isinstance(med.times, list) else [] 
+        meds_data.append({
+            "pill_name": med.pill_name,
+            "dosage": med.dosage,
+            "times": times_list,
+            "frequency": med.frequency,
+            "times_per_day": med.times_per_day
+        })
+    
+    meds_data_json = json.dumps(meds_data, cls=DjangoJSONEncoder)
 
-	return render(request, 'medicines/medication_list.html', {
-		'meds': meds,
-		"VAPID_PUBLIC_KEY": settings.VAPID_PUBLIC_KEY,
-		"meds_data_json": meds_data_json
-	})
+    return render(request, 'medicines/medication_list.html', {
+        'meds': meds,
+        "VAPID_PUBLIC_KEY": settings.VAPID_PUBLIC_KEY,
+        "meds_data_json": meds_data_json
+    })
 
 
 @login_required
 def medication_create(request):
-	if request.method == "POST":
-		pill_name = request.POST.get("pill_name")
-		dosage = request.POST.get("dosage")
-		frequency = request.POST.get("frequency_type")
-		times_per_day = int(request.POST.get("times_per_day", 1))
-		times = request.POST.getlist("times")
+    if request.method == "POST":
+        pill_name = request.POST.get("pill_name")
+        dosage = request.POST.get("dosage")
+        frequency = request.POST.get("frequency_type")
+        times_per_day = int(request.POST.get("times_per_day", 1))
+        times = request.POST.getlist("times")
 
-		if not pill_name or not dosage or not times:
-			messages.error(request, "Please fill all required fields.")
-			return redirect('med_add')
+        if not pill_name or not dosage or not times:
+            messages.error(request, "Please fill all required fields.")
+            return redirect('med_add')
 
-		Medication.objects.create(
-			user=request.user,
-			pill_name=pill_name,
-			dosage=int(dosage),
-			frequency=frequency,
-			times_per_day=times_per_day,
-			times=times
-		)
-		messages.success(request, f"{pill_name} added successfully!")
-		return redirect('med_list')
+        Medication.objects.create(
+            user=request.user,
+            pill_name=pill_name,
+            dosage=int(dosage),
+            frequency=frequency,
+            times_per_day=times_per_day,
+            times=times,
+            # google_event_ids defaults to [] here
+        )
+        messages.success(request, f"{pill_name} added successfully!")
+        return redirect('med_list')
 
-	return render(request, "medicines/medication_form.html", {"med": None})
+    return render(request, "medicines/medication_form.html", {"med": None})
 
 
 @login_required
 def medication_update(request, pk):
     med = get_object_or_404(Medication, pk=pk, user=request.user)
+    
+    # Store old data before POST processing
+    old_times = med.times 
+    old_frequency = med.frequency
+    old_event_ids = med.google_event_ids # Capture old list of IDs
+
     if request.method == 'POST':
         submitted_times = request.POST.getlist('times')
+        
+        # 1. Update medication object fields
         med.pill_name = request.POST.get('pill_name')
         med.dosage = request.POST.get('dosage')
-        med.frequency = request.POST.get('frequency_type')
+        new_frequency = request.POST.get('frequency_type')
+        
+        med.frequency = new_frequency
         med.times = submitted_times
         med.times_per_day = len(submitted_times) 
         
@@ -123,11 +248,42 @@ def medication_update(request, pk):
         if med.times_per_day == 0:
             messages.error(request, 'At least one time is required.')
             return render(request, 'medicines/medication_form.html', {'med': med})
+            
+        # Determine if calendar event action is required
+        schedule_changed = (submitted_times != old_times) or (new_frequency != old_frequency)
+        
+        # 2. Handle Calendar Deletion if schedule changed AND events existed
+        if old_event_ids and schedule_changed:
+            _delete_google_events(request.user, old_event_ids)
+            # Clear the IDs locally before saving the new med data
+            med.google_event_ids = []
+
 
         try:
+            # 3. Save the medication changes
             med.save()
+            
+            # 4. Handle Calendar Re-creation (UPDATED to use helper function)
+            # Re-create events only if the schedule changed AND the medication was previously synced (had old IDs).
+            if old_event_ids and schedule_changed:
+                try:
+                    new_event_ids = _create_google_events(request.user, med)
+
+                    # Save the new IDs back to the medication object
+                    med.google_event_ids = new_event_ids
+                    med.save(update_fields=['google_event_ids'])
+                    messages.info(request, f"Google Calendar events were updated for the new schedule ({len(new_event_ids)} recurring events created).")
+
+                except GoogleCredentials.DoesNotExist:
+                    messages.warning(request, "Google Calendar schedule was updated, but events were not re-added (credentials missing).")
+                except Exception as e:
+                    print(f"Calendar Re-creation Error: {e}")
+                    messages.warning(request, "Google Calendar events could not be re-added due to an API error.")
+                
+
             messages.success(request, f"{med.pill_name} updated successfully!")
             return redirect('med_list')
+            
         except Exception as e:
             print(f"Database Save Error: {e}")
             messages.error(request, f'Save failed due to a system error.')
@@ -138,34 +294,42 @@ def medication_update(request, pk):
 
 @login_required
 def medication_delete(request, pk):
-	med = get_object_or_404(Medication, pk=pk, user=request.user)
-	med.delete()
-	messages.success(request, "Medication deleted successfully!")
-	return redirect('med_list')
+    med = get_object_or_404(Medication, pk=pk, user=request.user)
+    
+    # 1. Delete Google Calendar Events first, if any (NEW)
+    if med.google_event_ids:
+        deleted_count = _delete_google_events(request.user, med.google_event_ids)
+        if deleted_count > 0:
+             messages.info(request, f"Removed {deleted_count} linked Google Calendar event(s).")
+             
+    # 2. Delete the Medication object
+    med.delete()
+    messages.success(request, "Medication deleted successfully!")
+    return redirect('med_list')
 
 
 @csrf_exempt
 def save_subscription(request):
-	if request.method == "POST":
-		try:
-			data = json.loads(request.body)
-			subscription = PushSubscription(
-				user=request.user, 	
-				endpoint=data['endpoint'],
-				p256dh=data['p256dh'], 	
-				auth=data['auth']
-			)
-			subscription.save()
-			return JsonResponse({'status': 'success'})
-		except Exception as e:
-			print(f"Error saving subscription: {e}")
-			return JsonResponse({'status': 'error', 'message': str(e)})
-	return JsonResponse({'status': 'error'})
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            subscription = PushSubscription(
+                user=request.user,  
+                endpoint=data['endpoint'],
+                p256dh=data['p256dh'],  
+                auth=data['auth']
+            )
+            subscription.save()
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            print(f"Error saving subscription: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)})
+    return JsonResponse({'status': 'error'})
 
 
 @login_required
 def get_vapid_public_key(request):
-	return JsonResponse({'vapid_public_key': settings.VAPID_PUBLIC_KEY})
+    return JsonResponse({'vapid_public_key': settings.VAPID_PUBLIC_KEY})
 
 
 # ===========================
@@ -204,7 +368,7 @@ def dashboard_view(request):
                 'pill_name': med.pill_name,
                 'time': t_str,
                 'status': dose_log.status,
-                'dose_log_id': dose_log.id  # This will always have a value now
+                'dose_log_id': dose_log.id 
             })
 
     # --- PRIMARY CHANGE FOR SEQUENTIAL ORDER ---
@@ -342,7 +506,9 @@ def dashboard_data(request):
 
     dose_data = []
     for med in meds:
-        for t_str in med.times:
+        # Safety check: Ensure med.times is a list before iterating
+        times_list = med.times if isinstance(med.times, list) else [] 
+        for t_str in times_list:
             t_obj = datetime.strptime(t_str, "%H:%M").time()
             scheduled_dt = timezone.make_aware(datetime.combine(today, t_obj))
             try:
@@ -468,107 +634,130 @@ def get_today_dose_logs(request):
 # ===========================
 # GOOGLE CALENDAR INTEGRATION
 # ===========================
+
+# --------------------------------------
+# Step 1: Authenticate with Google OAuth
+# --------------------------------------
 @login_required
 def google_calendar_auth(request):
-	flow = Flow.from_client_config(
-		{
-			"web": {
-				"client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
-				"client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
-				"auth_uri": "https://accounts.google.com/o/oauth2/auth",
-				"token_uri": "https://oauth2.googleapis.com/token",
-			}
-		},
-		scopes=["https://www.googleapis.com/auth/calendar.events"],
-		redirect_uri=request.build_absolute_uri(reverse('google_calendar_callback'))
-	)
-	auth_url, _ = flow.authorization_url(
-		access_type='offline', 
-		include_granted_scopes='true',
-		prompt='consent' # <-- ADDED: Forces consent screen to ensure refresh_token is returned
-	)
-	return redirect(auth_url)
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=["https://www.googleapis.com/auth/calendar.events"],
+        redirect_uri=request.build_absolute_uri(reverse('google_calendar_callback'))
+    )
+    auth_url, _ = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='consent'  # ensures refresh_token is returned
+    )
+    return redirect(auth_url)
 
 
+# --------------------------------------
+# Step 2: Handle OAuth Callback
+# --------------------------------------
 @login_required
 def google_calendar_callback(request):
-	flow = Flow.from_client_config(
-		{
-			"web": {
-				"client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
-				"client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
-				"auth_uri": "https://accounts.google.com/o/oauth2/auth",
-				"token_uri": "https://oauth2.googleapis.com/token",
-			}
-		},
-		scopes=["https://www.googleapis.com/auth/calendar.events"],
-		redirect_uri=request.build_absolute_uri(reverse('google_calendar_callback'))
-	)
-	flow.fetch_token(authorization_response=request.build_absolute_uri())
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=["https://www.googleapis.com/auth/calendar.events"],
+        redirect_uri=request.build_absolute_uri(reverse('google_calendar_callback'))
+    )
+    flow.fetch_token(authorization_response=request.build_absolute_uri())
+    credentials = flow.credentials
 
-	credentials = flow.credentials
+    defaults = {
+        "access_token": credentials.token,
+        "client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
+        "client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
+    }
 
-	# Prepare defaults, ensuring we only include refresh_token if provided by Google.
-	# If it is not provided (which is common on subsequent authorizations), 
-	# Django will retain the existing value on update, preventing the IntegrityError.
-	defaults = {
-		"access_token": credentials.token,
-		"client_id": settings.GOOGLE_CALENDAR_CLIENT_ID,
-		"client_secret": settings.GOOGLE_CALENDAR_CLIENT_SECRET,
-	}
+    if credentials.refresh_token:
+        defaults["refresh_token"] = credentials.refresh_token
 
-	if credentials.refresh_token:
-		defaults["refresh_token"] = credentials.refresh_token
+    GoogleCredentials.objects.update_or_create(
+        user=request.user,
+        defaults=defaults
+    )
 
-	creds_obj, _ = GoogleCredentials.objects.update_or_create(
-		user=request.user,
-		defaults=defaults
-	)
-	messages.success(request, "Google Calendar connected successfully!")
-	return redirect('dashboard')
+    messages.success(request, "Google Calendar connected successfully! You can now sync your medication schedule.")
+    return redirect('dashboard')
 
 
+# --------------------------------------
+# Step 3: Add Medication Event(s) (UPDATED for recurrence)
+# --------------------------------------
 @login_required
 def add_event(request, med_id=None):
-	med = get_object_or_404(Medication, id=med_id, user=request.user)
+    med = get_object_or_404(Medication, id=med_id, user=request.user)
 
-	try:
-		creds_obj = GoogleCredentials.objects.get(user=request.user)
-		creds = Credentials(
-			token=creds_obj.access_token,
-			refresh_token=creds_obj.refresh_token,
-			token_uri="https://oauth2.googleapis.com/token",
-			client_id=creds_obj.client_id,
-			client_secret=creds_obj.client_secret,
-			scopes=["https://www.googleapis.com/auth/calendar.events"]
-		)
-	except GoogleCredentials.DoesNotExist:
-		messages.error(request, "Please connect your Google Calendar first.")
-		return redirect('google_calendar_auth')
+    # Check if events are already linked
+    if med.google_event_ids:
+        return JsonResponse({'status': 'error', 'message': f"Events are already linked to this medication. Delete them first if you want to re-add."}, status=400)
 
-	service = build('calendar', 'v3', credentials=creds)
-	today = date.today()
-	events_added = []
 
-	for t_str in med.times:
-		time_obj = datetime.strptime(t_str, "%H:%M").time()
-		start_datetime = datetime.combine(today, time_obj)
-		end_datetime = start_datetime + timedelta(minutes=30)
+    try:
+        # Calls the helper function to create recurring events
+        new_event_ids = _create_google_events(request.user, med)
 
-		event = {
-			'summary': f'Medication: {med.pill_name}',
-			'description': f'Take {med.dosage} mg',
-			'start': {'dateTime': start_datetime.isoformat(), 'timeZone': 'Asia/Kolkata'},
-			'end': {'dateTime': end_datetime.isoformat(), 'timeZone': 'Asia/Kolkata'},
-		}
+        # Save ALL newly created master event IDs to the medication object
+        med.google_event_ids = new_event_ids
+        med.save(update_fields=['google_event_ids'])
 
-		created_event = service.events().insert(
-			calendarId='primary',
-			body=event
-		).execute()
-		events_added.append(created_event.get('htmlLink'))
+    except GoogleCredentials.DoesNotExist:
+        # Return JSON error for AJAX handling
+        return JsonResponse({'status': 'error', 'message': "Please connect your Google Calendar first."}, status=401)
+    except Exception as e:
+        print(f"Calendar Add Event Error: {e}")
+        return JsonResponse({'status': 'error', 'message': f"An API error occurred: {e}"}, status=500)
 
-	return JsonResponse({'status': 'ok', 'events': events_added})
+    # Success JSON Response
+    return JsonResponse({
+        'status': 'ok', 
+        'message': f"Successfully created {len(new_event_ids)} recurring calendar event(s).",
+        'count': len(new_event_ids)
+    })
+
+
+# --------------------------------------
+# Step 4: Delete Medication Event
+# --------------------------------------
+@login_required
+@require_POST
+def delete_event(request, med_id=None):
+    med = get_object_or_404(Medication, id=med_id, user=request.user)
+    
+    # Check the new list field
+    if not med.google_event_ids:
+        return JsonResponse({'status': 'error', 'message': "No linked Google Calendar events found."}, status=400)
+
+    # Use the helper function to delete events
+    deleted_count = _delete_google_events(request.user, med.google_event_ids)
+    
+    # Clear the field after deletion attempts
+    med.google_event_ids = []
+    med.save(update_fields=['google_event_ids'])
+
+    # Success JSON Response
+    return JsonResponse({
+        'status': 'ok', 
+        'message': f"Successfully deleted {deleted_count} linked Google Calendar recurring event(s)!"
+    })
+
 
 @csrf_exempt
 def chatbot_view(request):

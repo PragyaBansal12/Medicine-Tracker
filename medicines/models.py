@@ -10,7 +10,7 @@ FREQUENCY_CHOICES = [
 ]
 
 class Medication(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)  # link with user
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True) 
     pill_name = models.CharField(max_length=100)
     dosage = models.PositiveIntegerField(
         help_text="Dosage in milligrams",
@@ -19,10 +19,17 @@ class Medication(models.Model):
     frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default="DAILY")  
     times_per_day = models.PositiveIntegerField(default=1, validators=[MaxValueValidator(24)])
     times = models.JSONField(default=list)
+    
+    # ⭐ CRUCIAL CHANGE: Now stores a list of Google Calendar Event IDs
+    google_event_ids = models.JSONField(default=list, blank=True) 
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.pill_name} - {self.dosage} ({self.user.username})"
+        username = self.user.username if self.user else "N/A"
+        return f"{self.pill_name} - {self.dosage} ({username})"
+
+# --------------------------------------------------------------------------------------------------
 
 class PushSubscription(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -34,15 +41,13 @@ class PushSubscription(models.Model):
     def __str__(self):
         return f"{self.user.username} subscription"
         
-
 class NotificationLog(models.Model):
     medication = models.ForeignKey(Medication, on_delete=models.CASCADE)
     sent_date = models.DateField()  
     sent_time = models.CharField(max_length=5)  
-    sent_at = models.DateTimeField(auto_now_add=True)  
+    sent_at = models.DateTimeField(auto_now_add=True) 
     
     class Meta:
-        # unique notif
         unique_together = ['medication', 'sent_date', 'sent_time']
     
     def __str__(self):
@@ -56,24 +61,24 @@ class DoseLog(models.Model):
 
     medication = models.ForeignKey(Medication, on_delete=models.CASCADE, related_name='logs')
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    timestamp = models.DateTimeField(auto_now_add=True)  # record when user logged the dose
-    scheduled_time = models.DateTimeField()  # full datetime of scheduled dose
+    timestamp = models.DateTimeField(auto_now_add=True) 
+    scheduled_time = models.DateTimeField() 
     status = models.CharField(max_length=10, choices=STATUS_CHOICES)
 
     class Meta:
         ordering = ['scheduled_time']
 
     def __str__(self):
-        return f"{self.medication.pill_name} - {self.status} @ {self.scheduled_time.strftime('%Y-%m-%d %H:%M')}"    
+        return f"{self.medication.pill_name} - {self.status} @ {self.scheduled_time.strftime('%Y-%m-%d %H:%M')}"  
 
 class GoogleCredentials(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     access_token = models.TextField()
-    refresh_token = models.TextField()
+    refresh_token = models.TextField(null=True, blank=True)
     token_uri = models.TextField(default="https://oauth2.googleapis.com/token")
     client_id = models.TextField()
     client_secret = models.TextField()
-    scopes = models.TextField(default="https://www.googleapis.com/auth/calendar")
+    scopes = models.TextField(default="https://www.googleapis.com/auth/calendar.events")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
