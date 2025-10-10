@@ -1,100 +1,162 @@
 class Chatbot {
     constructor() {
         this.isOpen = false;
-        this.initializeElements();
+        this.isLoading = false;
+        this.initializeChatbot();
+    }
+
+    initializeChatbot() {
         this.attachEventListeners();
     }
 
-    initializeElements() {
-        this.toggleBtn = document.getElementById('chatbotToggle');
-        this.modal = document.getElementById('chatbotModal');
-        this.closeBtn = document.getElementById('chatbotClose');
-        this.messagesContainer = document.getElementById('chatbotMessages');
-        this.input = document.getElementById('chatbotInput');
-        this.sendBtn = document.getElementById('chatbotSend');
-        this.quickQuestions = document.querySelectorAll('.quick-question');
-    }
-
     attachEventListeners() {
-        this.toggleBtn.addEventListener('click', () => this.toggleModal());
-        this.closeBtn.addEventListener('click', () => this.closeModal());
-        this.sendBtn.addEventListener('click', () => this.sendMessage());
-        this.input.addEventListener('keypress', (e) => {
+        const toggleBtn = document.getElementById('chatbotToggle');
+        const closeBtn = document.getElementById('chatbotClose');
+        const sendBtn = document.getElementById('chatbotSend');
+        const input = document.getElementById('chatbotInput');
+        const quickQuestions = document.querySelectorAll('.quick-question');
+
+        // Toggle modal
+        toggleBtn.addEventListener('click', () => this.toggleModal());
+
+        // Close modal
+        closeBtn.addEventListener('click', () => this.toggleModal());
+
+        // Send message
+        sendBtn.addEventListener('click', () => this.sendMessage());
+        input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
         });
 
-        this.quickQuestions.forEach(btn => {
+        // Quick questions
+        quickQuestions.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const question = e.target.getAttribute('data-question');
-                this.input.value = question;
+                input.value = question;
                 this.sendMessage();
             });
         });
 
-        // Close modal when clicking outside
+        // Close when clicking outside
         document.addEventListener('click', (e) => {
-            if (this.isOpen && !this.modal.contains(e.target) && !this.toggleBtn.contains(e.target)) {
-                this.closeModal();
+            const modal = document.getElementById('chatbotModal');
+            if (this.isOpen && !modal.contains(e.target) && !toggleBtn.contains(e.target)) {
+                this.toggleModal();
             }
         });
     }
 
     toggleModal() {
         this.isOpen = !this.isOpen;
+        const modal = document.getElementById('chatbotModal');
+
         if (this.isOpen) {
-            this.modal.classList.add('active');
-            this.input.focus();
+            modal.classList.add('active');
+            document.getElementById('chatbotInput').focus();
         } else {
-            this.modal.classList.remove('active');
+            modal.classList.remove('active');
         }
     }
 
-    openModal() {
-        this.isOpen = true;
-        this.modal.classList.add('active');
-        this.input.focus();
-    }
+    async sendMessage() {
+        const input = document.getElementById('chatbotInput');
+        const message = input.value.trim();
 
-    closeModal() {
-        this.isOpen = false;
-        this.modal.classList.remove('active');
-    }
-
-    sendMessage() {
-        const message = this.input.value.trim();
-        if (!message) return;
+        if (!message || this.isLoading) return;
 
         this.addMessage(message, 'user');
-        this.input.value = '';
+        input.value = '';
+        this.showLoading();
 
-        // Simulate bot response (you'll replace this with actual API call)
-        setTimeout(() => {
-            this.addMessage("I understand you're asking: '" + message + "'. This feature is coming soon!", 'bot');
-        }, 1000);
+        try {
+            const response = await this.callChatbotAPI(message);
+            this.addMessage(response, 'bot');
+        } catch (error) {
+            console.error('Chatbot API error:', error);
+            this.addMessage("Sorry, I'm having trouble connecting right now. Please try again later.", 'bot');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async callChatbotAPI(message) {
+        const csrfToken = this.getCSRFToken();
+
+        const response = await fetch('/chatbot/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ message: message })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response;
+    }
+
+    getCSRFToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    showLoading() {
+        this.isLoading = true;
+        const sendBtn = document.getElementById('chatbotSend');
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        sendBtn.disabled = true;
+    }
+
+    hideLoading() {
+        this.isLoading = false;
+        const sendBtn = document.getElementById('chatbotSend');
+        sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        sendBtn.disabled = false;
     }
 
     addMessage(text, sender) {
+        const messagesContainer = document.getElementById('chatbotMessages');
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}-message`;
-
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         messageDiv.innerHTML = `
             <div class="message-avatar">
                 <i class="fas fa-${sender === 'bot' ? 'robot' : 'user'}"></i>
             </div>
             <div class="message-content">
-                <p>${text}</p>
+                <p>${this.escapeHtml(text)}</p>
                 <span class="message-time">${time}</span>
             </div>
         `;
 
-        this.messagesContainer.appendChild(messageDiv);
-        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 
-// Initialize chatbot when DOM is loaded
 document.addEventListener('DOMContentLoaded', function () {
     new Chatbot();
 });

@@ -305,17 +305,17 @@ def get_chatbot_response(user_query: str) -> str:
         return "I'm here to help with medication questions. You can ask about your medications, schedule, side effects, or general health information."
     
 
-response1 = get_chatbot_response("When was last dose taken?")
-print(response1)
+# response1 = get_chatbot_response("When was last dose taken?")
+# print(response1)
 
-res2= get_chatbot_response("Suggest me adherence tips.")
-print(res2)
+# res2= get_chatbot_response("Suggest me adherence tips.")
+# print(res2)
 
-# What is medication schedule for today?
+# # What is medication schedule for today?
 
 
-res3= get_chatbot_response("hi")
-print(res3)
+# res3= get_chatbot_response("hi")
+# print(res3)
 
 
 

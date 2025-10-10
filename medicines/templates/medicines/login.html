@@ -172,7 +172,6 @@
             background: linear-gradient(45deg, var(--disney-gold), var(--disney-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            animation: float 3s ease-in-out infinite;
         }
 
         .form-control-magical {
@@ -282,7 +281,7 @@
             margin-left: 1rem;
         }
 
-        .messages {
+        /* .messages {
             list-style: none;
             padding: 0;
             margin: 1rem 0;
@@ -308,7 +307,7 @@
                 opacity: 1;
                 transform: translateY(0);
             }
-        }
+        } */
 
         .google-icon {
             width: 20px;
@@ -380,13 +379,13 @@
             Continue with Google
         </a>
 
-        {% if messages %}
+        <!-- {% if messages %}
         <ul class="messages">
             {% for message in messages %}
             <li><i class="fas fa-exclamation-triangle me-2"></i>{{ message }}</li>
             {% endfor %}
         </ul>
-        {% endif %}
+        {% endif %} -->
     </div>
 
     <script>

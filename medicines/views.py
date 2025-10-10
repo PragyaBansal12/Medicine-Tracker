@@ -44,7 +44,7 @@ def login_view(request):
 		user = authenticate(request, username=username, password=password)
 		if user:
 			login(request, user)
-			return redirect('med_list')
+			return redirect('dashboard')
 		messages.error(request, 'Invalid username or password')
 	return render(request, 'medicines/login.html')
 

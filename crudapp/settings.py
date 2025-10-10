@@ -12,7 +12,7 @@ import os # <-- REQUIRED for setting environment variables
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = 'django-insecure-qm-j53r7%_325j2*j+z9ea47g!y9!#kt47&&_e2yo0bf*cg357'
+SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=True, cast=bool) # Switched to using config() for better environment handling
 ALLOWED_HOSTS = []
 
@@ -103,7 +103,6 @@ MIDDLEWARE = [
 	'django.middleware.csrf.CsrfViewMiddleware',
 	'django.contrib.auth.middleware.AuthenticationMiddleware',
 	'django.contrib.messages.middleware.MessageMiddleware',
-	'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 VAPID_PUBLIC_KEY = config("VAPID_PUBLIC_KEY", default="")
