@@ -26,7 +26,7 @@ def load_pdf_text(path):
             if page_text:
                 text += page_text + "\n"
     return text
-text=load_pdf_text(r"chatbot\resources\mock knowledge base.pdf")
+# text=load_pdf_text(r"chatbot\resources\mock knowledge base.pdf")
 # print(text)
 
 ## 2 >> Text Splitter
@@ -40,7 +40,7 @@ def split_text(text):
     )
     return splitter.split_text(text)
 
-chunks=split_text(text)
+# chunks=split_text(text)
 # print(chunks)
 
 
