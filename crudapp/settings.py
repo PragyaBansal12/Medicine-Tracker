@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=True, cast=bool) # Switched to using config() for better environment handling
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['medicine-tracker-1-wvl2.onrender.com']
 
 # --- START OF LOCAL FIX FOR OAUTH ---
 # The oauthlib library requires HTTPS, but for local development (http://127.0.0.1:8000), 
